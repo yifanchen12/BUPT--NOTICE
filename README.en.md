@@ -1,36 +1,58 @@
 # TongZhi
 
-A BUPT portal notice crawler that extracts campus activity information and exports it to Excel.
+[中文](README.md)
 
-TongZhi opens the local Chrome or Edge browser, visits the “Campus Notices” section of the Beijing University of Posts and Telecommunications information portal, reads notice articles, extracts activity location, time, department, and related metadata, then exports the result to an Excel file. By default, it only keeps activities that happen on the BUPT campus. Online meetings, off-campus venues, other university venues, and notices with unrecognized locations are excluded unless you explicitly loosen the filter.
+TongZhi is a structured activity-information extractor for the “Campus Notices” section of the Beijing University of Posts and Telecommunications information portal. It opens the portal through a local browser, reads notice list pages and article bodies, extracts activity location, time, department, activity name, publish date, and source URL, then exports the results to an Excel workbook.
 
-Chinese documentation: [README.md](README.md)
+## Purpose
+
+Campus notice articles are not fully standardized. Time, venue, department, and activity names may appear in the title, article body, or publish metadata. TongZhi is designed to automate the repetitive part of this workflow while keeping ambiguous records visible for manual review.
+
+The default filtering strategy is conservative. It only exports activities identified as happening on the BUPT campus. Online meetings, off-campus venues, other university venues, and records with unclear locations are excluded unless the filter is explicitly loosened.
 
 ## Features
 
-- Crawl campus notice list pages and article bodies.
-- Extract location, time, department, activity name, publish date, notice title, and source URL.
-- Export a sorted Excel table by location, time, and department.
+- Crawl BUPT campus notice list pages and article bodies.
+- Extract activity location, time, department, activity name, publish date, notice title, and source URL.
+- Export a sorted Excel workbook by location, time, and department.
 - Filter notices by today or by a specific publish date.
-- Optionally include off-campus, online, or uncertain-location notices for manual review.
-- Build a Windows single-file executable.
-- Install a Windows scheduled task for daily runs.
+- Include off-campus, online, or uncertain-location records when manual review is needed.
+- Build a Windows single-file executable with PyInstaller.
+- Install a Windows scheduled task for daily automated runs.
 
-## Security Notes
+## Repository Layout
 
-- The tool does not store usernames or passwords.
-- On the first run, if the CAS login page appears, log in manually in the browser.
-- Browser login state is stored under `runtime/chrome-profile` and reused later.
-- Local artifacts such as `runtime/`, `outputs/`, `dist/`, and `.venv/` are ignored by Git and should not be committed.
+```text
+.
+├── bupt_notice_crawler.py      # Main crawler
+├── run.ps1                     # Source-mode runner
+├── build_exe.ps1               # PyInstaller build script
+├── run_daily.ps1               # Daily run script
+├── install_daily_task.ps1      # Windows scheduled-task installer
+├── uninstall_daily_task.ps1    # Windows scheduled-task remover
+├── requirements.txt            # Python dependencies
+├── README.md                   # Chinese documentation
+└── README.en.md                # English documentation
+```
+
+The following local runtime artifacts are ignored by Git:
+
+```text
+.venv/      # Python virtual environment
+dist/       # Packaged executable
+build/      # PyInstaller build cache
+runtime/    # Browser profile, login state, and logs
+outputs/    # Excel output files
+```
 
 ## Requirements
 
 - Windows
+- PowerShell
 - Python 3.14 or a compatible version
 - Chrome or Edge
-- PowerShell
 
-Dependencies are listed in [requirements.txt](requirements.txt):
+Python dependencies:
 
 ```text
 beautifulsoup4
@@ -39,33 +61,63 @@ playwright
 pyinstaller
 ```
 
-## Run from Source
+## Quick Start
 
-First run:
+Run the crawler from source:
 
 ```powershell
 .\run.ps1 -Pages 5
 ```
 
-Common examples:
+On the first run, the browser may open a CAS login page. Log in manually in that browser window. The session state is stored locally under:
+
+```text
+runtime\chrome-profile
+```
+
+Later runs reuse this browser profile.
+
+## Common Usage
+
+Crawl 8 list pages and read up to 200 notices:
 
 ```powershell
 .\run.ps1 -Pages 8 -MaxItems 200
+```
+
+Write to a custom output path:
+
+```powershell
 .\run.ps1 -Pages 5 -Output ".\outputs\activities.xlsx"
+```
+
+Only process notices published today:
+
+```powershell
 .\run.ps1 -Pages 5 -TodayOnly
+```
+
+Only process notices published on a specific date:
+
+```powershell
 .\run.ps1 -Pages 5 -Date "2026-05-14"
+```
+
+Export all extracted activity records:
+
+```powershell
 .\run.ps1 -Pages 3 -IncludeAll
 ```
 
-To temporarily loosen location filtering and include off-campus, online, or uncertain-location notices for review:
+Include off-campus, online, or uncertain-location records for review:
 
 ```powershell
 .\run.ps1 -Pages 3 -IncludeOffCampus
 ```
 
-## CLI Usage
+## CLI Options
 
-Common direct Python commands:
+The Python entry point can also be called directly:
 
 ```powershell
 python .\bupt_notice_crawler.py --pages 5 --max-items 120
@@ -81,66 +133,80 @@ Show all options:
 python .\bupt_notice_crawler.py --help
 ```
 
+Common options:
+
+| Option | Description |
+| --- | --- |
+| `--pages` | Number of notice list pages to crawl |
+| `--max-items` | Maximum number of notices to read |
+| `--output` | Excel output path |
+| `--today-only` | Only process notices published today |
+| `--date` | Only process notices published on `YYYY-MM-DD` |
+| `--include-all` | Export all extracted activity records |
+| `--include-off-campus` | Include off-campus, online, and uncertain-location records |
+| `--headless` | Run without a visible browser window after login state exists |
+| `--profile-dir` | Custom browser profile directory |
+| `--chrome-path` | Custom Chrome or Edge executable path |
+
+## Excel Output
+
+The default output path uses this pattern:
+
+```text
+outputs\校内通知活动_YYYYMMDD_HHMMSS.xlsx
+```
+
+The main sheet is named `活动整理` and contains:
+
+| Column | Description |
+| --- | --- |
+| 活动地点 | Extracted activity venue |
+| 活动时间 | Extracted activity time |
+| 部门 | Publishing or organizing department |
+| 活动名称 | Activity name inferred from title and body |
+| 发布时间 | Notice publish date |
+| 通知标题 | Original notice title |
+| 原文链接 | Source article URL |
+| 备注 | Review notes or filtering hints |
+
 ## Build the Executable
+
+Run:
 
 ```powershell
 .\build_exe.ps1
 ```
 
-Run the packaged executable:
+The executable will be created at:
+
+```text
+dist\bupt_notice_crawler.exe
+```
+
+Examples:
 
 ```powershell
 .\dist\bupt_notice_crawler.exe --pages 5
-```
-
-Only process notices published today:
-
-```powershell
 .\dist\bupt_notice_crawler.exe --pages 5 --today-only
-```
-
-Only process notices published on a specific date:
-
-```powershell
 .\dist\bupt_notice_crawler.exe --pages 5 --date 2026-05-14
-```
-
-Loosen location filtering:
-
-```powershell
 .\dist\bupt_notice_crawler.exe --pages 5 --include-off-campus
 ```
 
-## Excel Output
-
-The main sheet is named `活动整理` and contains these columns:
-
-1. Activity Location
-2. Activity Time
-3. Department
-4. Activity Name
-5. Publish Date
-6. Notice Title
-7. Source URL
-8. Notes
-
-If time or department cannot be identified from a notice, the notes column will flag it for manual review.
-
 ## Daily Scheduled Run
 
-Before installing the task, run the packaged executable manually once and finish CAS login:
+Before installing the scheduled task, run the packaged executable manually once and complete CAS login:
 
 ```powershell
 .\dist\bupt_notice_crawler.exe --pages 1
 ```
 
-Install the Windows scheduled task. By default, it runs every day at 08:30 and only processes notices published that day:
+Install the Windows scheduled task. By default, it runs every day at 08:30:
 
 ```powershell
 .\install_daily_task.ps1
 ```
 
-Set a custom run time:
+Set a custom run time and page count:
 
 ```powershell
 .\install_daily_task.ps1 -At "20:30" -Pages 5
@@ -152,13 +218,13 @@ The scheduled task calls:
 .\run_daily.ps1
 ```
 
-Daily output path:
+Daily output:
 
 ```text
 outputs\daily\校内通知活动_YYYY-MM-DD.xlsx
 ```
 
-Daily log path:
+Daily logs:
 
 ```text
 runtime\logs\daily_YYYY-MM-DD.log
@@ -172,11 +238,20 @@ Remove the scheduled task:
 
 ## Campus Location Matching
 
-The crawler prioritizes BUPT campus keywords such as BUPT, campus names, teaching buildings, main building, research building, economics and management building, student development center, student activity center, science hall, gymnasium, library, lecture hall, meeting room, classroom, auditorium, playground, and cafeteria.
+TongZhi prioritizes BUPT campus-related location keywords, including campus names, teaching buildings, the main building, research buildings, student activity spaces, science hall, gymnasium, library, lecture halls, meeting rooms, classrooms, auditorium, playground, and cafeterias.
 
-If new common venue names appear in school notices, add them to `CAMPUS_LOCATION_KEYWORDS` in [bupt_notice_crawler.py](bupt_notice_crawler.py).
+If new common venue names appear in portal notices, add them to `CAMPUS_LOCATION_KEYWORDS` in [bupt_notice_crawler.py](bupt_notice_crawler.py).
+
+## Security and Privacy
+
+- TongZhi does not store usernames or passwords.
+- CAS login is completed manually by the user in the browser.
+- Browser session state is stored only on the local machine under `runtime/chrome-profile`.
+- Do not commit `runtime/`, `outputs/`, `dist/`, `.venv/`, or other local artifacts to a public repository.
 
 ## Development
+
+Create a virtual environment and install dependencies:
 
 ```powershell
 py -3.14 -m venv .venv
@@ -189,3 +264,7 @@ Run:
 ```powershell
 .\run.ps1 -Pages 3
 ```
+
+## Limitations
+
+TongZhi depends on the portal page structure and keyword-based extraction rules. If the portal markup changes, or if a notice does not include clear time, venue, or department information, the generated result may require manual review.
