@@ -1,0 +1,4 @@
+beautifulsoup4>=4.12
+openpyxl>=3.1
+playwright>=1.45
+pyinstaller>=6.8
