@@ -268,3 +268,7 @@ Run:
 ## Limitations
 
 TongZhi depends on the portal page structure and keyword-based extraction rules. If the portal markup changes, or if a notice does not include clear time, venue, or department information, the generated result may require manual review.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for the copyright notice.
