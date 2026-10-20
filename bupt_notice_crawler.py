@@ -3,9 +3,8 @@
 北京邮电大学信息门户“校内通知”活动整理爬虫。
 
 登录策略：
-1. 首次运行会打开系统 Chrome。
-2. 如果出现 CAS 登录页，请在浏览器里正常登录。
-3. 程序会把登录态保存在 runtime/chrome-profile，后续运行会自动复用。
+- local 模式使用系统 Chrome/Edge，并把登录态保存在 runtime/chrome-profile。
+- lexmount 模式创建临时云浏览器会话；用户通过会话查看链接手动登录，运行结束后会话关闭。
 """
 
 from __future__ import annotations
