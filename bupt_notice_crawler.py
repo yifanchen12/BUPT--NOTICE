@@ -345,12 +345,21 @@ def target_accessible_with_browser_cookies(context, target_url: str, timeout: in
     return "校内通知" in text or "发布部门" in text or "校园通知" in text
 
 
-def ensure_logged_in(page, target_url: str, login_timeout: int):
+def ensure_logged_in(
+    page,
+    target_url: str,
+    login_timeout: int,
+    cookie_probe: bool = True,
+    inspector_url: str = "",
+):
     safe_goto(page, target_url)
     if not is_login_page(page):
         return page
 
     log("检测到登录页。请在打开的浏览器中完成信息门户/CAS 登录，程序会自动继续。")
+    if inspector_url:
+        log(f"Lexmount 远程浏览器：{inspector_url}")
+        log("该链接可访问本次浏览器会话，请勿公开分享。")
     deadline = time.time() + login_timeout
     last_probe = 0.0
     last_wait_log = 0.0
@@ -364,7 +373,7 @@ def ensure_logged_in(page, target_url: str, login_timeout: int):
                 return page
 
         now = time.time()
-        if now - last_probe >= 5:
+        if cookie_probe and now - last_probe >= 5:
             last_probe = now
             if target_accessible_with_browser_cookies(page.context, target_url):
                 log("已检测到浏览器登录态，正在进入校内通知列表。")
@@ -832,7 +841,85 @@ def collect_notices(page, list_url: str, pages: int, max_items: int) -> List[Not
     return all_notices[:max_items]
 
 
-def crawl(args) -> List[ActivityRow]:
+def process_notices(page, args, inspector_url: str = "", cookie_probe: bool = True) -> List[ActivityRow]:
+    page.set_default_timeout(args.timeout * 1000)
+    page = ensure_logged_in(
+        page,
+        args.list_url,
+        args.login_timeout,
+        cookie_probe=cookie_probe,
+        inspector_url=inspector_url,
+    )
+    notices = collect_notices(page, args.list_url, args.pages, args.max_items)
+    if args.target_date:
+        log(f"仅整理发布日期为 {args.target_date} 的通知。")
+
+    rows: List[ActivityRow] = []
+    for index, notice in enumerate(notices, start=1):
+        if args.target_date and notice.publish_date and notice.publish_date != args.target_date:
+            continue
+        log(f"读取正文 {index}/{len(notices)}：{notice.title}")
+        try:
+            safe_goto(page, notice.url, timeout_ms=args.timeout * 1000)
+            if is_login_page(page):
+                page = ensure_logged_in(
+                    page,
+                    notice.url,
+                    args.login_timeout,
+                    cookie_probe=cookie_probe,
+                    inspector_url=inspector_url,
+                )
+            row = parse_activity(
+                notice,
+                page.content(),
+                args.include_all,
+                campus_only=not args.include_off_campus,
+                target_date=args.target_date,
+            )
+            if row:
+                rows.append(row)
+        except Exception as exc:
+            if args.target_date and notice.publish_date != args.target_date:
+                continue
+            rows.append(
+                ActivityRow(
+                    location="",
+                    event_time="",
+                    department=notice.department,
+                    activity_name=notice.title,
+                    publish_date=notice.publish_date,
+                    notice_title=notice.title,
+                    url=notice.url,
+                    note=f"抓取失败：{exc}",
+                    sort_time="",
+                )
+            )
+        if args.delay > 0:
+            time.sleep(args.delay)
+
+    rows.sort(
+        key=lambda row: (
+            row.location or "~~~~",
+            row.sort_time or "9999-12-31 23:59",
+            row.department or "~~~~",
+            row.activity_name,
+        )
+    )
+    return rows
+
+
+def lexmount_inspector_url(client, session_id: str) -> str:
+    try:
+        for target in client.sessions.list_targets(session_id):
+            inspect_url = getattr(target, "inspect_url", "")
+            if inspect_url:
+                return inspect_url
+    except Exception:
+        log("无法读取 Lexmount 浏览器查看链接。")
+    return ""
+
+
+def crawl_local(args) -> List[ActivityRow]:
     chrome_path = find_chrome_executable(args.chrome_path)
     if chrome_path:
         log(f"使用浏览器：{chrome_path}")
@@ -855,61 +942,57 @@ def crawl(args) -> List[ActivityRow]:
                 "--disable-dev-shm-usage",
             ],
         )
-        page = context.pages[0] if context.pages else context.new_page()
-        page.set_default_timeout(args.timeout * 1000)
+        try:
+            page = context.pages[0] if context.pages else context.new_page()
+            return process_notices(page, args)
+        finally:
+            context.close()
 
-        page = ensure_logged_in(page, args.list_url, args.login_timeout)
-        notices = collect_notices(page, args.list_url, args.pages, args.max_items)
-        if args.target_date:
-            log(f"仅整理发布日期为 {args.target_date} 的通知。")
 
-        rows: List[ActivityRow] = []
-        for index, notice in enumerate(notices, start=1):
-            if args.target_date and notice.publish_date and notice.publish_date != args.target_date:
-                continue
-            log(f"读取正文 {index}/{len(notices)}：{notice.title}")
-            try:
-                safe_goto(page, notice.url, timeout_ms=args.timeout * 1000)
-                if is_login_page(page):
-                    page = ensure_logged_in(page, notice.url, args.login_timeout)
-                row = parse_activity(
-                    notice,
-                    page.content(),
-                    args.include_all,
-                    campus_only=not args.include_off_campus,
-                    target_date=args.target_date,
-                )
-                if row:
-                    rows.append(row)
-            except Exception as exc:
-                if args.target_date and notice.publish_date != args.target_date:
-                    continue
-                rows.append(
-                    ActivityRow(
-                        location="",
-                        event_time="",
-                        department=notice.department,
-                        activity_name=notice.title,
-                        publish_date=notice.publish_date,
-                        notice_title=notice.title,
-                        url=notice.url,
-                        note=f"抓取失败：{exc}",
-                        sort_time="",
-                    )
-                )
-            if args.delay > 0:
-                time.sleep(args.delay)
-
-        context.close()
-    rows.sort(
-        key=lambda row: (
-            row.location or "~~~~",
-            row.sort_time or "9999-12-31 23:59",
-            row.department or "~~~~",
-            row.activity_name,
+def crawl_lexmount(args) -> List[ActivityRow]:
+    if not os.environ.get("LEXMOUNT_API_KEY") or not os.environ.get("LEXMOUNT_PROJECT_ID"):
+        raise RuntimeError(
+            "Lexmount 模式需要设置 LEXMOUNT_API_KEY 和 LEXMOUNT_PROJECT_ID 环境变量。"
         )
-    )
-    return rows
+    try:
+        from lexmount import Lexmount
+    except ImportError as exc:
+        raise RuntimeError(
+            "未安装 Lexmount SDK。请按 README 安装 requirements.txt 后重试。"
+        ) from exc
+
+    log("正在创建 Lexmount 云浏览器会话。")
+    with Lexmount() as client:
+        with client.sessions.create(
+            browser_mode="normal",
+            downloads={"enabled": False},
+            recording={"persistent": False},
+        ) as session:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.connect_over_cdp(session.connect_url)
+                try:
+                    if not browser.contexts:
+                        raise RuntimeError("Lexmount 会话没有可用的 Chromium 浏览器上下文。")
+                    context = browser.contexts[0]
+                    page = context.pages[0] if context.pages else context.new_page()
+                    inspector_url = lexmount_inspector_url(client, session.id)
+                    log("已连接 Lexmount 云浏览器；首次使用需要在远程浏览器中完成北邮 CAS 登录。")
+                    if not inspector_url:
+                        log("如出现登录页，请从 Lexmount 控制台的会话列表打开本次云浏览器。")
+                    return process_notices(
+                        page,
+                        args,
+                        inspector_url=inspector_url,
+                        cookie_probe=False,
+                    )
+                finally:
+                    browser.close()
+
+
+def crawl(args) -> List[ActivityRow]:
+    if args.browser_provider == "lexmount":
+        return crawl_lexmount(args)
+    return crawl_local(args)
 
 
 def write_excel(rows: Sequence[ActivityRow], output_path: Path) -> None:
@@ -1006,7 +1089,13 @@ def positive_int(value: str) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="自动登录北邮信息门户，抓取校内通知并整理活动 Excel。"
+        description="通过本地或 Lexmount 云浏览器访问北邮信息门户，整理校内通知活动 Excel。"
+    )
+    parser.add_argument(
+        "--browser-provider",
+        choices=("local", "lexmount"),
+        default="local",
+        help="浏览器来源：local 使用本机 Chrome/Edge，lexmount 使用云浏览器",
     )
     parser.add_argument("--list-url", default=DEFAULT_LIST_URL, help="校内通知列表页 URL")
     parser.add_argument("--home-url", default=DEFAULT_HOME_URL, help="信息门户首页 URL")
@@ -1058,6 +1147,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.browser_provider == "lexmount" and args.headless:
+        parser.error("Lexmount 云浏览器由云端运行，不需要也不接受 --headless")
 
     try:
         output_path = Path(args.output).expanduser().resolve()

@@ -2,7 +2,7 @@
 
 [中文](README.md)
 
-TongZhi is a structured activity-information extractor for the “Campus Notices” section of the Beijing University of Posts and Telecommunications information portal. It opens the portal through a local browser, reads notice list pages and article bodies, extracts activity location, time, department, activity name, publish date, and source URL, then exports the results to an Excel workbook.
+TongZhi is a structured activity-information extractor for the “Campus Notices” section of the Beijing University of Posts and Telecommunications information portal. It can use a local browser or a Lexmount cloud browser to read notice list pages and article bodies, extract activity location, time, department, activity name, publish date, and source URL, then export the results to an Excel workbook.
 
 ## Purpose
 
@@ -13,6 +13,7 @@ The default filtering strategy is conservative. It only exports activities ident
 ## Features
 
 - Crawl BUPT campus notice list pages and article bodies.
+- Choose local Chrome/Edge or Lexmount CloudBrowser; cloud mode controls remote Chromium through Playwright CDP.
 - Extract activity location, time, department, activity name, publish date, notice title, and source URL.
 - Export a sorted Excel workbook by location, time, and department.
 - Filter notices by today or by a specific publish date.
@@ -50,14 +51,15 @@ outputs/    # Excel output files
 - Windows
 - PowerShell
 - Python 3.14 or a compatible version
-- Chrome or Edge
+- Chrome or Edge (local-browser mode only)
 
 Python dependencies:
 
 ```text
 beautifulsoup4
 openpyxl
-playwright
+lexmount==0.6.1
+playwright==1.63.0
 pyinstaller
 ```
 
@@ -76,6 +78,26 @@ runtime\chrome-profile
 ```
 
 Later runs reuse this browser profile.
+
+### Use a Lexmount Cloud Browser
+
+Create an API Key in the Lexmount console and copy the Project ID from the same project. Set both environment variables in PowerShell, then run:
+
+```powershell
+$env:LEXMOUNT_API_KEY = "your API Key"
+$env:LEXMOUNT_PROJECT_ID = "your Project ID"
+.\run.ps1 -BrowserProvider lexmount -Pages 5
+```
+
+Or run the Python entry point directly:
+
+```powershell
+python .\bupt_notice_crawler.py --browser-provider lexmount --pages 5
+```
+
+If the portal redirects to BUPT CAS, the terminal displays a link to this Lexmount browser session. Open it and complete the login yourself; the crawler continues when it detects the authenticated page. Anyone with the link may be able to access the active session, so do not share it publicly. Cloud mode does not read the local Chrome profile or copy cloud cookies into local HTTP requests.
+
+The API Key and Project ID are read only from environment variables. Never put them in source files or commit them. Each run creates a fresh cloud browser session, so login state is not retained between runs. `--headless` is for local mode only; the daily scheduled task continues to use the local browser.
 
 ## Common Usage
 
@@ -137,6 +159,7 @@ Common options:
 
 | Option | Description |
 | --- | --- |
+| `--browser-provider` | `local` uses local Chrome/Edge; `lexmount` uses a Lexmount cloud browser (default: `local`) |
 | `--pages` | Number of notice list pages to crawl |
 | `--max-items` | Maximum number of notices to read |
 | `--output` | Excel output path |
@@ -247,6 +270,8 @@ If new common venue names appear in portal notices, add them to `CAMPUS_LOCATION
 - TongZhi does not store usernames or passwords.
 - CAS login is completed manually by the user in the browser.
 - Browser session state is stored only on the local machine under `runtime/chrome-profile`.
+- Lexmount mode uses an API Key and Project ID to create a temporary cloud-browser session. CAS login is completed by the user in that remote browser; cloud sessions and login state are not persisted by this application.
+- The Lexmount remote-browser link may grant access to the active session. Do not share it publicly.
 - Do not commit `runtime/`, `outputs/`, `dist/`, `.venv/`, or other local artifacts to a public repository.
 
 ## Development

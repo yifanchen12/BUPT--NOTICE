@@ -2,7 +2,7 @@
 
 [English](README.en.md)
 
-BUPT-NOTICE 是一个面向北京邮电大学信息门户“校内通知”栏目的活动信息整理工具。它通过本机浏览器访问通知列表与正文，自动提取活动地点、时间、发布部门、活动名称、发布时间和原文链接，并导出结构化 Excel 表格，适合用于日常活动汇总、部门信息整理和人工复核前的数据预处理。
+BUPT-NOTICE 是一个面向北京邮电大学信息门户“校内通知”栏目的活动信息整理工具。它可通过本机浏览器或 Lexmount 云浏览器访问通知列表与正文，自动提取活动地点、时间、发布部门、活动名称、发布时间和原文链接，并导出结构化 Excel 表格，适合用于日常活动汇总、部门信息整理和人工复核前的数据预处理。
 
 ## 项目定位
 
@@ -13,6 +13,7 @@ BUPT-NOTICE 是一个面向北京邮电大学信息门户“校内通知”栏�
 ## 核心功能
 
 - 抓取北邮信息门户校内通知列表与通知正文。
+- 可选择本机 Chrome/Edge 或 Lexmount CloudBrowser；云模式使用 Playwright CDP 控制远程 Chromium。
 - 从正文中提取活动地点、活动时间、发布部门、活动名称等字段。
 - 按“活动地点 -> 活动时间 -> 部门”排序生成 Excel。
 - 支持按发布日期筛选，包括当天通知和指定日期通知。
@@ -50,14 +51,15 @@ outputs/    # Excel 输出文件
 - Windows
 - PowerShell
 - Python 3.14 或兼容版本
-- Chrome 或 Edge
+- Chrome 或 Edge（仅本机浏览器模式需要）
 
 Python 依赖：
 
 ```text
 beautifulsoup4
 openpyxl
-playwright
+lexmount==0.6.1
+playwright==1.63.0
 pyinstaller
 ```
 
@@ -76,6 +78,26 @@ runtime\chrome-profile
 ```
 
 后续运行会复用该登录状态。
+
+### 使用 Lexmount 云浏览器
+
+在 Lexmount 控制台创建 API Key，并取得同一项目的 Project ID。在 PowerShell 中设置环境变量后运行：
+
+```powershell
+$env:LEXMOUNT_API_KEY = "你的 API Key"
+$env:LEXMOUNT_PROJECT_ID = "你的 Project ID"
+.\run.ps1 -BrowserProvider lexmount -Pages 5
+```
+
+也可直接运行：
+
+```powershell
+python .\bupt_notice_crawler.py --browser-provider lexmount --pages 5
+```
+
+首次访问若跳转到北邮 CAS 登录页，程序会在终端显示本次 Lexmount 云浏览器查看链接。打开链接后由你本人完成登录；程序检测到登录成功后继续采集。该链接可访问本次浏览器会话，请勿公开分享。云模式不会读取或转发本机 Chrome 登录态，也不会把云端 Cookie 复制到本机 HTTP 请求。
+
+API Key 和 Project ID 只从环境变量读取，切勿写入源码或提交到 Git。每次运行都会新建云浏览器会话，因此登录态不会跨运行保留。`--headless` 只适用于本机模式；每日计划任务仍使用本机浏览器模式。
 
 ## 常用运行方式
 
@@ -138,13 +160,14 @@ python .\bupt_notice_crawler.py --help
 | 参数 | 说明 |
 | --- | --- |
 | `--pages` | 抓取通知列表页数 |
+| `--browser-provider` | `local` 使用本机 Chrome/Edge；`lexmount` 使用 Lexmount 云浏览器（默认 `local`） |
 | `--max-items` | 最多读取通知数量 |
 | `--output` | Excel 输出路径 |
 | `--today-only` | 只整理当天发布的通知 |
 | `--date` | 只整理指定日期发布的通知，格式为 `YYYY-MM-DD` |
 | `--include-all` | 输出所有提取到的活动记录 |
 | `--include-off-campus` | 包含校外、线上或地点不明确记录 |
-| `--headless` | 无头模式运行，适合已有登录状态的自动任务 |
+| `--headless` | 本机浏览器无头模式；Lexmount 云浏览器不使用此参数 |
 | `--profile-dir` | 指定浏览器用户数据目录 |
 | `--chrome-path` | 指定 Chrome 或 Edge 可执行文件路径 |
 
@@ -247,6 +270,8 @@ TongZhi 会优先识别与北邮校内相关的地点特征，包括校区、教
 - 程序不会保存账号或密码。
 - 登录过程由用户在浏览器中手动完成。
 - 浏览器登录状态只保存在本机 `runtime/chrome-profile`。
+- Lexmount 模式使用 Lexmount API Key/Project ID 创建临时云浏览器会话；CAS 登录由用户在远程浏览器中完成。程序不持久化云端会话或登录态。
+- Lexmount 远程浏览器查看链接可访问当前会话，请勿公开分享。
 - 不要将 `runtime/`、`outputs/`、`dist/`、`.venv/` 等本地产物提交到公开仓库。
 
 ## 开发

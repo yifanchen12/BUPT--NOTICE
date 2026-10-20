@@ -17,6 +17,7 @@ try {
         --onefile `
         --name "bupt_notice_crawler" `
         --collect-all playwright `
+        --collect-all lexmount `
         --hidden-import bs4 `
         "bupt_notice_crawler.py"
 }
