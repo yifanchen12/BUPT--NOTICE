@@ -6,7 +6,9 @@ param(
     [string]$Date = "",
     [switch]$IncludeAll,
     [switch]$IncludeOffCampus,
-    [switch]$Headless
+    [switch]$Headless,
+    [ValidateSet("local", "lexmount")]
+    [string]$BrowserProvider = "local"
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,6 +23,7 @@ if (-not (Test-Path $Python)) {
 
 $ArgsList = @(
     (Join-Path $Root "bupt_notice_crawler.py"),
+    "--browser-provider", $BrowserProvider,
     "--pages", $Pages,
     "--max-items", $MaxItems
 )
